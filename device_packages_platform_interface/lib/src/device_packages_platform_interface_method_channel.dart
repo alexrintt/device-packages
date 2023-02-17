@@ -21,16 +21,9 @@ class MethodChannelDevicePackagesPlatformInterface
   );
 
   @override
-  Future<String?> getPlatformVersion() async {
-    final String? version =
-        await methodChannel.invokeMethod<String>('getPlatformVersion');
-
-    return version;
-  }
-
-  @override
   Stream<DevicePackage> getDevicePackagesAsStream({
     bool includeIcon = false,
+    bool includeSystemPackages = false,
   }) {
     return eventChannel
         .receiveBroadcastStream('getDevicePackagesAsStream')
@@ -38,14 +31,20 @@ class MethodChannelDevicePackagesPlatformInterface
   }
 
   @override
-  Stream<DevicePackage> didInstallPackage({bool includeIcon = false}) {
+  Stream<DevicePackage> didInstallPackage({
+    bool includeIcon = false,
+    bool includeSystemPackages = false,
+  }) {
     return eventChannel
         .receiveBroadcastStream('didInstallPackage')
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());
   }
 
   @override
-  Stream<DevicePackage> didUninstallPackage({bool includeIcon = false}) {
+  Stream<DevicePackage> didUninstallPackage({
+    bool includeIcon = false,
+    bool includeSystemPackages = false,
+  }) {
     return eventChannel
         .receiveBroadcastStream('didUninstallPackage')
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());

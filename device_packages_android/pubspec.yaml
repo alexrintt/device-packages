@@ -1,7 +1,13 @@
 name: device_packages_android
-description: A new Flutter plugin project.
-version: 0.0.1
-homepage:
+description: Flutter plugin to get android device packages (apps), listen when an app is installed and uninstalled (ACTION_PACKAGE_ADDED and ACTION_PACKAGE_REMOVED).
+version: 0.1.0
+homepage: https://github.com/alexrintt/device-packages
+repository: https://github.com/alexrintt/device-packages
+issue_tracker: https://github.com/alexrintt/device-packages
+documentation: https://github.com/alexrintt/device-packages
+funding:
+  - https://www.buymeacoffee.com/alexrintt
+  - https://www.github.com/sponsors/alexrintt
 
 environment:
   sdk: '>=2.18.4 <3.0.0'
@@ -15,7 +21,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  lint: ^2.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

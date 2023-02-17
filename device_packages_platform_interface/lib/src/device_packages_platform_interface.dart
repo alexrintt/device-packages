@@ -26,24 +26,25 @@ abstract class DevicePackagesPlatformInterfacePlatform
     _instance = instance;
   }
 
-  Future<String?> getPlatformVersion();
+  Future<List<DevicePackage>> getDevicePackages({
+    bool includeIcon = false,
+    bool includeSystemPackages = false,
+  }) =>
+      getDevicePackagesAsStream(includeIcon: includeIcon).toList();
 
   Stream<DevicePackage> getDevicePackagesAsStream({
     bool includeIcon = false,
+    bool includeSystemPackages = false,
   });
-
-  Future<List<DevicePackage>> getDevicePackages({
-    bool includeIcon = false,
-  }) async {
-    return getDevicePackagesAsStream(includeIcon: includeIcon).toList();
-  }
 
   Stream<DevicePackage> didUninstallPackage({
     bool includeIcon = false,
+    bool includeSystemPackages = false,
   });
 
   Stream<DevicePackage> didInstallPackage({
     bool includeIcon = false,
+    bool includeSystemPackages = false,
   });
 }
 

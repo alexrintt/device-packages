@@ -15,15 +15,15 @@ environment:
   flutter: ">=2.5.0"
 
 dependencies:
-  flutter:
-    sdk: flutter
-  plugin_platform_interface: ^2.0.2
-
   # Development dependencies:
   device_packages_android:
     path: ../device_packages_android
   device_packages_platform_interface:
     path: ../device_packages_platform_interface
+
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
   flutter_test:

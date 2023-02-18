@@ -30,6 +30,7 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
   private lateinit var channel: MethodChannel
   private lateinit var installEventChannel: EventChannel
   private lateinit var uninstallEventChannel: EventChannel
+  private lateinit var getDevicePackagesEventChannel: EventChannel
 
   var context: Context? = null
 
@@ -57,12 +58,119 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
       "io.alexrintt.device_packages.platform_interface.eventchannel/uninstall"
     )
     uninstallEventChannel.setStreamHandler(DidUninstallPackageStreamHandler(this))
+
+    getDevicePackagesEventChannel = EventChannel(
+      flutterPluginBinding.binaryMessenger,
+      "io.alexrintt.device_packages.platform_interface.eventchannel/getdevicepackages"
+    )
+    getDevicePackagesEventChannel.setStreamHandler(
+      GetDevicePackagesStreamHandler(this)
+    )
   }
 
-  override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-    context = null
+  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     channel.setMethodCallHandler(null)
+
+    installEventChannel.setStreamHandler(null)
     uninstallEventChannel.setStreamHandler(null)
+    getDevicePackagesEventChannel.setStreamHandler(null)
+  }
+}
+
+class GetDevicePackagesStreamHandler(private val plugin: DevicePackagesAndroidPlugin) :
+  EventChannel.StreamHandler {
+  private var eventSink: EventChannel.EventSink? = null
+
+  override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+    if (events == null || arguments == null) return
+
+    registerListener(events)
+
+    val includeSystemPackages: Boolean =
+      parseArg(arguments, "includeSystemPackages") ?: false
+    val includeIcon: Boolean =
+      parseArg(arguments, "includeIcon") ?: true
+
+    if (plugin.context == null) {
+      eventSink?.error(
+        DevicePackagesAndroidPluginMethodCallHandler.APPLICATION_CONTEXT_IS_NULL,
+        "Could not fetch device packages, context is [null].",
+        arguments
+      )
+      return cancelListener()
+    }
+
+    if (plugin.context!!.packageManager == null) {
+      eventSink?.error(
+        DevicePackagesAndroidPluginMethodCallHandler.APPLICATION_PACKAGE_MANAGER_IS_NULL,
+        "Could not fetch device packages, the package manager is [null].",
+        arguments
+      )
+      return cancelListener()
+    }
+
+    val flags: Int = PackageManager.GET_META_DATA
+
+    val packages: List<PackageInfo> = if (Build.VERSION.SDK_INT >= 33) {
+      plugin.context!!.packageManager!!.getInstalledPackages(
+        PackageManager.PackageInfoFlags.of(
+          flags.toLong()
+        )
+      )
+    } else {
+      @Suppress("DEPRECATION") // we are handling when API >= 33.
+      plugin.context!!.packageManager!!.getInstalledPackages(flags)
+    }
+
+    packages.forEach skip@{
+      val isSystemPackage =
+        (it.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
+
+      if (isSystemPackage && !includeSystemPackages) {
+        return@skip
+      }
+
+      if (eventSink == null) {
+        // Listener was canceled during the loop by some other event.
+        return cancelListener()
+      }
+
+      eventSink?.success(
+        mapOf(
+          "id" to it.packageName,
+          "name" to plugin.context!!.packageManager.getApplicationLabel(it.applicationInfo),
+          "path" to it.applicationInfo.sourceDir,
+          "icon" to
+            if (includeIcon) {
+              bitmapToBytes(
+                drawableToBitmap(
+                  plugin.context!!.packageManager.getApplicationIcon(
+                    it.applicationInfo
+                  )
+                )
+              )
+            } else {
+              null
+            }
+        )
+      )
+    }
+
+    cancelListener()
+  }
+
+  override fun onCancel(arguments: Any?) = cancelListener()
+
+  private fun registerListener(eventSink: EventChannel.EventSink) {
+    cancelListener()
+    this.eventSink = eventSink
+  }
+
+  private fun cancelListener() {
+    if (eventSink != null) {
+      eventSink!!.endOfStream()
+      eventSink = null
+    }
   }
 }
 

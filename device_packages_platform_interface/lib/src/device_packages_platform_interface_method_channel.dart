@@ -20,13 +20,22 @@ class MethodChannelDevicePackagesPlatformInterface
     'io.alexrintt.device_packages.platform_interface.default/eventchannel',
   );
 
+  int _generateId() => UniqueKey().hashCode;
+
   @override
   Stream<DevicePackage> getDevicePackagesAsStream({
     bool includeIcon = false,
     bool includeSystemPackages = false,
   }) {
+    final Map<String, dynamic> args = <String, dynamic>{
+      'eventName': 'getDevicePackagesAsStream',
+      'includeIcon': '$includeIcon',
+      'includeSystemPackages': '$includeSystemPackages',
+      'listenerId': '${_generateId()}',
+    };
+
     return eventChannel
-        .receiveBroadcastStream('getDevicePackagesAsStream')
+        .receiveBroadcastStream(args)
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());
   }
 
@@ -35,8 +44,15 @@ class MethodChannelDevicePackagesPlatformInterface
     bool includeIcon = false,
     bool includeSystemPackages = false,
   }) {
+    final Map<String, dynamic> args = <String, dynamic>{
+      'eventName': 'didInstallPackage',
+      'includeIcon': '$includeIcon',
+      'includeSystemPackages': '$includeSystemPackages',
+      'listenerId': '${_generateId()}',
+    };
+
     return eventChannel
-        .receiveBroadcastStream('didInstallPackage')
+        .receiveBroadcastStream(args)
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());
   }
 
@@ -45,8 +61,15 @@ class MethodChannelDevicePackagesPlatformInterface
     bool includeIcon = false,
     bool includeSystemPackages = false,
   }) {
+    final Map<String, dynamic> args = <String, dynamic>{
+      'eventName': 'didUninstallPackage',
+      'includeIcon': '$includeIcon',
+      'includeSystemPackages': '$includeSystemPackages',
+      'listenerId': '${_generateId()}',
+    };
+
     return eventChannel
-        .receiveBroadcastStream('didUninstallPackage')
+        .receiveBroadcastStream(args)
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());
   }
 }
@@ -61,32 +84,35 @@ class MethodChannelDevicePackagesPlatformInterface
 /// This also will discard any [DevicePackage] instance that [isNull], since they are also not useful.
 class _RawBroadcastEventToDevicePackageStreamTransformer
     implements StreamTransformer<dynamic, DevicePackage> {
-  static bool _filterBroadcastStreamEvent(dynamic event) {
-    return event is Map<String, dynamic>;
-  }
+  static DevicePackage? _fromBroadcastStreamEvent(dynamic event) {
+    if (event is! Map) return null;
 
-  static DevicePackage _fromBroadcastStreamEvent(Map<String, dynamic> event) {
+    if (event.keys.any((dynamic key) => key is! String)) {
+      return null;
+    }
+
+    final Map<String, dynamic> rawPackage = Map<String, dynamic>.from(event);
+
     return DevicePackage(
-      icon: event['icon'] is List<int>
-          ? Uint8List.fromList(event['icon'] as List<int>)
+      icon: rawPackage['icon'] is List<int>
+          ? Uint8List.fromList(rawPackage['icon'] as List<int>)
           : null,
-      id: event['id'] as String?,
-      name: event['name'] as String?,
-      path: event['path'] as String?,
+      id: rawPackage['id'] as String?,
+      name: rawPackage['name'] as String?,
+      path: rawPackage['path'] as String?,
     );
   }
 
-  static bool _devicePackageIsNotNull(DevicePackage package) {
-    return !package.isNull;
+  static bool _devicePackageIsNotNull(DevicePackage? package) {
+    return package != null && !package.isNull;
   }
 
   @override
   Stream<DevicePackage> bind(Stream<dynamic> stream) {
     return stream
-        .where(_filterBroadcastStreamEvent)
-        .cast<Map<String, dynamic>>()
         .map(_fromBroadcastStreamEvent)
-        .where(_devicePackageIsNotNull);
+        .where(_devicePackageIsNotNull)
+        .cast<DevicePackage>();
   }
 
   @override

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -27,7 +28,8 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
   /// This local reference serves to register the plugin with the Flutter Engine and unregister it
   /// when the Flutter Engine is detached from the Activity
   private lateinit var channel: MethodChannel
-  private lateinit var eventChannel: EventChannel
+  private lateinit var installEventChannel: EventChannel
+  private lateinit var uninstallEventChannel: EventChannel
 
   var context: Context? = null
 
@@ -36,7 +38,7 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
 
     channel = MethodChannel(
       flutterPluginBinding.binaryMessenger,
-      "io.alexrintt.device_packages.platform_interface.default/methodchannel"
+      "io.alexrintt.device_packages.platform_interface.methodchannel/default"
     )
     channel.setMethodCallHandler(
       DevicePackagesAndroidPluginMethodCallHandler(
@@ -44,212 +46,230 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
       )
     )
 
-    eventChannel = EventChannel(
+    installEventChannel = EventChannel(
       flutterPluginBinding.binaryMessenger,
-      "io.alexrintt.device_packages.platform_interface.default/eventchannel"
+      "io.alexrintt.device_packages.platform_interface.eventchannel/install"
     )
-    eventChannel.setStreamHandler(DevicePackagesAndroidPluginStreamHandler(this))
+    installEventChannel.setStreamHandler(DidInstallPackageStreamHandler(this))
+
+    uninstallEventChannel = EventChannel(
+      flutterPluginBinding.binaryMessenger,
+      "io.alexrintt.device_packages.platform_interface.eventchannel/uninstall"
+    )
+    uninstallEventChannel.setStreamHandler(DidUninstallPackageStreamHandler(this))
   }
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     context = null
     channel.setMethodCallHandler(null)
-    eventChannel.setStreamHandler(null)
+    uninstallEventChannel.setStreamHandler(null)
   }
 }
-
 
 class DevicePackagesAndroidPluginMethodCallHandler(private val plugin: DevicePackagesAndroidPlugin) :
   MethodCallHandler {
-  override fun onMethodCall(
-    @NonNull call: MethodCall,
-    @NonNull result: Result
-  ) {
-    if (call.method == "getPlatformVersion") {
-      result.success("Android ${Build.VERSION.RELEASE}")
-    } else {
-      result.notImplemented()
+  override fun onMethodCall(call: MethodCall, result: Result) {
+    when (call.method) {
+      "getDevicePackages" -> getDevicePackages(call, result)
+      "getDevicePackageCount" -> getDevicePackageCount(call, result)
+      else -> result.notImplemented()
     }
+  }
+
+  companion object {
+    const val APPLICATION_CONTEXT_IS_NULL: String =
+      "APPLICATION_CONTEXT_IS_NULL"
+    const val APPLICATION_PACKAGE_MANAGER_IS_NULL: String =
+      "APPLICATION_CONTEXT_IS_NULL"
+  }
+
+  private fun getDevicePackages(call: MethodCall, result: Result) {
+    val includeSystemPackages: Boolean =
+      parseArg(call.arguments, "includeSystemPackages") ?: false
+    val includeIcon: Boolean =
+      parseArg(call.arguments, "includeIcon") ?: true
+
+    if (plugin.context == null) {
+      return result.error(
+        APPLICATION_CONTEXT_IS_NULL,
+        "Could not fetch device packages, context is [null].",
+        call.arguments
+      )
+    }
+
+    if (plugin.context!!.packageManager == null) {
+      return result.error(
+        APPLICATION_PACKAGE_MANAGER_IS_NULL,
+        "Could not fetch device packages, the package manager is [null].",
+        call.arguments
+      )
+    }
+
+    val flags: Int = PackageManager.GET_META_DATA
+
+    val packages: List<PackageInfo> = if (Build.VERSION.SDK_INT >= 33) {
+      plugin.context!!.packageManager!!.getInstalledPackages(
+        PackageManager.PackageInfoFlags.of(
+          flags.toLong()
+        )
+      )
+    } else {
+      @Suppress("DEPRECATION") // we are handling when API >= 33.
+      plugin.context!!.packageManager!!.getInstalledPackages(flags)
+    }
+
+    val eligiblePackages = packages.filter isEligible@{
+      val isSystemPackage =
+        (it.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
+
+      if (isSystemPackage && !includeSystemPackages) {
+        return@isEligible false
+      }
+
+      return@isEligible true
+    }.map {
+      mapOf(
+        "id" to it.packageName,
+        "name" to plugin.context!!.packageManager.getApplicationLabel(it.applicationInfo),
+        "path" to it.applicationInfo.sourceDir,
+        "icon" to
+          if (includeIcon) {
+            bitmapToBytes(
+              drawableToBitmap(
+                plugin.context!!.packageManager.getApplicationIcon(
+                  it.applicationInfo
+                )
+              )
+            )
+          } else {
+            null
+          }
+      )
+    }
+
+    result.success(eligiblePackages)
+  }
+
+  private fun getDevicePackageCount(call: MethodCall, result: Result) {
+    val includeSystemPackages: Boolean =
+      parseArg(call.arguments, "includeSystemPackages") ?: false
+
+    if (plugin.context == null) {
+      return result.error(
+        APPLICATION_CONTEXT_IS_NULL,
+        "Could not fetch device packages, context is [null].",
+        call.arguments
+      )
+    }
+
+    if (plugin.context!!.packageManager == null) {
+      return result.error(
+        APPLICATION_PACKAGE_MANAGER_IS_NULL,
+        "Could not fetch device packages, the package manager is [null].",
+        call.arguments
+      )
+    }
+
+    val flags = 0
+
+    val packages: List<PackageInfo> = if (Build.VERSION.SDK_INT >= 33) {
+      plugin.context!!.packageManager!!.getInstalledPackages(
+        PackageManager.PackageInfoFlags.of(
+          flags.toLong()
+        )
+      )
+    } else {
+      @Suppress("DEPRECATION") // we are handling when API >= 33.
+      plugin.context!!.packageManager!!.getInstalledPackages(flags)
+    }
+
+    val eligiblePackages = packages.filter isEligible@{
+      val isSystemPackage =
+        (it.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
+
+      if (isSystemPackage && !includeSystemPackages) {
+        return@isEligible false
+      }
+
+      return@isEligible true
+    }
+
+    result.success(eligiblePackages.size)
   }
 }
 
-class DevicePackagesAndroidPluginStreamHandler(private val plugin: DevicePackagesAndroidPlugin) :
+abstract class DidChangePackageListStreamHandler(
+  private val plugin: DevicePackagesAndroidPlugin,
+  private val action: String
+) :
   EventChannel.StreamHandler {
-  private var listeners: MutableMap<String, EventChannel.EventSink> =
-    mutableMapOf()
-  private var receivers: MutableMap<String, BroadcastReceiver> = mutableMapOf()
+  private var receiver: BroadcastReceiver? = null
+  private var eventSink: EventChannel.EventSink? = null
 
-  private fun deserializeEventArguments(arguments: Any?): Pair<String?, String?> {
-    if (arguments !is Map<*, *>) return Pair<String?, String?>(null, null)
+  private val hasListener: Boolean get() = receiver != null || eventSink != null
 
-    val args: Map<*, *> = arguments
+  override fun onListen(arguments: Any, eventSink: EventChannel.EventSink) {
+    if (hasListener) cancelListener()
 
-    val listenerId: String? = args["listenerId"] as String?
-    val eventName: String? = args["eventName"] as String?
+    val includeSystemPackages: Boolean =
+      parseArg(arguments, "includeSystemPackages") ?: false
+    val includeIcon: Boolean = parseArg(arguments, "includeIcon") ?: true
 
-    return Pair(eventName, listenerId)
-  }
-
-  override fun onListen(arguments: Any, events: EventChannel.EventSink) {
-    if (arguments !is Map<*, *>) return
-
-    val (eventName, listenerId) = deserializeEventArguments(arguments)
-
-    if (eventName == null || listenerId == null) {
-      events.error(
-        MISSING_EVENT_NAME_OR_LISTENER_ID_CODE,
-        MISSING_EVENT_NAME_OR_LISTENER_ID,
-        arguments,
+    val receiver: BroadcastReceiver =
+      DidChangePackageListBroadcastReceiver(
+        eventSink,
+        includeSystemPackages = includeSystemPackages,
+        includeIcon = includeIcon,
+        action = action
       )
-      return events.endOfStream()
-    }
 
-    cancelListener(listenerId)
+    registerListener(receiver, eventSink)
 
-    when (eventName) {
-      "didInstallPackage" -> didInstallPackage(listenerId, events, arguments)
-      "didUninstallPackage" -> didUninstallPackage(
-        listenerId,
-        events,
-        arguments
+    if (plugin.context == null) {
+      Log.d(
+        "DEVICE_PACKAGES",
+        "Plugin application context is null when calling $action event handler, ignoring."
       )
+      return cancelListener()
     }
+
+    val intentFilter = IntentFilter().apply {
+      addAction(action)
+      addDataScheme("package")
+    }
+
+    plugin.context!!.registerReceiver(receiver, intentFilter)
   }
 
-  override fun onCancel(arguments: Any?) {
-    val (_, listenerId) = deserializeEventArguments(arguments)
-    if (listenerId != null) {
-      cancelListener(listenerId)
-    }
-  }
+  override fun onCancel(arguments: Any?) = cancelListener()
 
   private fun registerListener(
-    listenerId: String,
-    broadcastReceiver: BroadcastReceiver,
-    eventSink: EventChannel.EventSink,
-    cancelIfExists: Boolean = true
+    receiver: BroadcastReceiver,
+    eventSink: EventChannel.EventSink
   ) {
-    if (cancelIfExists) {
-      cancelListener(listenerId)
-    }
+    cancelListener()
 
-    if (listeners[listenerId] == null) {
-      listeners[listenerId] = eventSink
-      receivers[listenerId] = broadcastReceiver
-    }
+    this.eventSink = eventSink
+    this.receiver = receiver
   }
 
-  private fun cancelListener(listenerId: String) {
-    if (listeners[listenerId] != null) {
-      listeners[listenerId]!!.endOfStream()
-      listeners.remove(listenerId)
+  private fun cancelListener() {
+    if (eventSink != null) {
+      eventSink!!.endOfStream()
+      eventSink = null
     }
 
-    if (receivers[listenerId] != null) {
-      // Unregister the BroadcastReceiver instance.
-      plugin.context?.unregisterReceiver(receivers[listenerId])?.apply {
-        // Remove receiver from map only if context is not null.
-        receivers[listenerId]
-      }
+    if (receiver != null) {
+      plugin.context?.unregisterReceiver(receiver)
     }
-  }
-
-  private inline fun <reified T> parseArg(arguments: Any?, key: String): T? {
-    if (arguments !is Map<*, *>) return null
-
-    if (arguments[key] !is T) {
-      return null
-    }
-
-    return arguments[key] as T
-  }
-
-  private fun didInstallPackage(
-    listenerId: String,
-    eventSink: EventChannel.EventSink,
-    arguments: Any?
-  ) {
-    val includeSystemPackages: Boolean =
-      parseArg(arguments, "includeSystemPackages") ?: false
-    val includeIcon: Boolean = parseArg(arguments, "includeIcon") ?: true
-
-    val action: String = Intent.ACTION_PACKAGE_ADDED
-
-    val receiver: BroadcastReceiver =
-      DidChangePackageListBroadcastReceiver(
-        eventSink,
-        includeSystemPackages = includeSystemPackages,
-        includeIcon = includeIcon,
-        action = action
-      )
-
-    registerListener(listenerId, receiver, eventSink)
-
-    if (plugin.context == null) {
-      eventSink.error(
-        TRIED_CALLING_EVENT_CHANNEL_WHEN_CONTEXT_IS_NULL_CODE,
-        TRIED_CALLING_EVENT_CHANNEL_WHEN_CONTEXT_IS_NULL,
-        arguments
-      )
-      return cancelListener(listenerId)
-    }
-
-    val intentFilter = IntentFilter().apply {
-      addAction(action)
-      addDataScheme("package")
-    }
-
-    plugin.context!!.registerReceiver(receiver, intentFilter)
-  }
-
-  private fun didUninstallPackage(
-    listenerId: String,
-    eventSink: EventChannel.EventSink,
-    arguments: Any?
-  ) {
-    val includeSystemPackages: Boolean =
-      parseArg(arguments, "includeSystemPackages") ?: false
-    val includeIcon: Boolean = parseArg(arguments, "includeIcon") ?: true
-
-    val action: String = Intent.ACTION_PACKAGE_REMOVED
-
-    val receiver: BroadcastReceiver =
-      DidChangePackageListBroadcastReceiver(
-        eventSink,
-        includeSystemPackages = includeSystemPackages,
-        includeIcon = includeIcon,
-        action = action
-      )
-
-    registerListener(listenerId, receiver, eventSink)
-
-    if (plugin.context == null) {
-      eventSink.error(
-        TRIED_CALLING_EVENT_CHANNEL_WHEN_CONTEXT_IS_NULL_CODE,
-        TRIED_CALLING_EVENT_CHANNEL_WHEN_CONTEXT_IS_NULL,
-        arguments
-      )
-      return cancelListener(listenerId)
-    }
-
-    val intentFilter = IntentFilter().apply {
-      addAction(action)
-      addDataScheme("package")
-    }
-
-    plugin.context!!.registerReceiver(receiver, intentFilter)
   }
 }
 
-const val MISSING_EVENT_NAME_OR_LISTENER_ID_CODE =
-  "MISSING_EVENT_NAME_OR_LISTENER_ID"
-const val MISSING_EVENT_NAME_OR_LISTENER_ID =
-  "An event API was called with [listenerId] or [eventName] set to null."
+class DidInstallPackageStreamHandler(plugin: DevicePackagesAndroidPlugin) :
+  DidChangePackageListStreamHandler(plugin, Intent.ACTION_PACKAGE_ADDED)
 
-const val TRIED_CALLING_EVENT_CHANNEL_WHEN_CONTEXT_IS_NULL_CODE: String =
-  "TRIED_CALLING_EVENT_CHANNEL_WHEN_CONTEXT_IS_NULL"
-const val TRIED_CALLING_EVENT_CHANNEL_WHEN_CONTEXT_IS_NULL: String =
-  "Tried to call [events] (eventSink) on native call when [context] (application context of type Context) is null."
+class DidUninstallPackageStreamHandler(plugin: DevicePackagesAndroidPlugin) :
+  DidChangePackageListStreamHandler(plugin, Intent.ACTION_PACKAGE_REMOVED)
 
 class DidChangePackageListBroadcastReceiver(
   private val eventSink: EventChannel.EventSink,
@@ -259,7 +279,6 @@ class DidChangePackageListBroadcastReceiver(
 ) :
   BroadcastReceiver() {
 
-  @SuppressWarnings("deprecated")
   override fun onReceive(context: Context?, intent: Intent?) {
     if (intent == null || context == null) return
 
@@ -278,56 +297,82 @@ class DidChangePackageListBroadcastReceiver(
 
     val flags: Int = PackageManager.GET_META_DATA
 
-    val applicationInfo: ApplicationInfo =
+    val packageInfo: PackageInfo? = try {
       if (Build.VERSION.SDK_INT >= 33) {
-        context.packageManager.getApplicationInfo(
+        context.packageManager.getPackageInfo(
           packageName,
-          PackageManager.ApplicationInfoFlags.of(flags.toLong())
+          PackageManager.PackageInfoFlags.of(flags.toLong())
         )
       } else {
         @Suppress("DEPRECATION") // we are handling when API >= 33.
-        context.packageManager.getApplicationInfo(packageName, flags)
+        context.packageManager.getPackageInfo(packageName, flags)
       }
+    } catch (e: PackageManager.NameNotFoundException) {
+      null
+    }
 
-    val isSystem = applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+    val isSystemPackage =
+      (packageInfo?.applicationInfo?.flags
+        ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
 
-    if (isSystem && !includeSystemPackages) return
+    if (isSystemPackage && !includeSystemPackages) return
 
-    val icon: ByteArray? = if (!includeIcon) null else
-      context.packageManager.getApplicationIcon(packageName).let {
-        bitmapToBytes(drawableToBitmap(it))
-      }
+    val icon: ByteArray? = try {
+      if (includeIcon)
+        context.packageManager.getApplicationIcon(packageName).let {
+          bitmapToBytes(drawableToBitmap(it))
+        }
+      else
+        null
+    } catch (e: PackageManager.NameNotFoundException) {
+      null
+    }
 
     eventSink.success(
       mapOf(
-        "id" to applicationInfo.packageName,
-        "name" to applicationInfo.name,
-        "path" to applicationInfo.sourceDir,
+        "id" to (packageInfo?.packageName ?: packageName),
+        "name" to packageInfo?.let {
+          context.packageManager.getApplicationLabel(
+            it.applicationInfo
+          )
+        },
+        "path" to packageInfo?.applicationInfo?.sourceDir,
         "icon" to icon
       )
     )
   }
 
-  private fun bitmapToBytes(bitmap: Bitmap): ByteArray {
-    val byteArrayOutputStream = ByteArrayOutputStream()
-    bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
-    return byteArrayOutputStream.toByteArray()
-  }
+}
 
-  private fun drawableToBitmap(drawable: Drawable): Bitmap {
-    val bitmap: Bitmap = Bitmap
-      .createBitmap(
-        drawable.intrinsicWidth,
-        drawable.intrinsicHeight,
-        Bitmap.Config.RGB_565
-      )
+private fun bitmapToBytes(bitmap: Bitmap): ByteArray {
+  val byteArrayOutputStream = ByteArrayOutputStream()
+  bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
+  return byteArrayOutputStream.toByteArray()
+}
 
-    val canvas = Canvas(bitmap)
-    drawable.setBounds(
-      0, 0, drawable.intrinsicWidth,
-      drawable.intrinsicHeight
+private fun drawableToBitmap(drawable: Drawable): Bitmap {
+  val bitmap: Bitmap = Bitmap
+    .createBitmap(
+      drawable.intrinsicWidth,
+      drawable.intrinsicHeight,
+      Bitmap.Config.RGB_565
     )
-    drawable.draw(canvas)
-    return bitmap
+
+  val canvas = Canvas(bitmap)
+  drawable.setBounds(
+    0, 0, drawable.intrinsicWidth,
+    drawable.intrinsicHeight
+  )
+  drawable.draw(canvas)
+  return bitmap
+}
+
+private inline fun <reified T> parseArg(arguments: Any?, key: String): T? {
+  if (arguments !is Map<*, *>) return null
+
+  if (arguments[key] !is T) {
+    return null
   }
+
+  return arguments[key] as T
 }

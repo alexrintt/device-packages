@@ -1,14 +1,20 @@
 import 'package:device_packages_platform_interface/device_packages_platform_interface.dart';
 
+export 'package:device_packages_platform_interface/device_packages_platform_interface.dart'
+    show DevicePackage;
+
+export 'package:device_packages_platform_interface/device_packages_platform_interface.dart'
+    show DevicePackagesPlatformInterface;
+
 /// Returns a all device packages.
 ///
 /// - If [includeIcon] is true, it will return the [DevicePackage] with [icon] set to a non-null value representing the icon bitmap bytes.
 /// - If [includeSystemPackages] is true, it will return internal packages (if supported in the host platform).
 Future<List<DevicePackage>> getDevicePackages({
-  bool includeIcon = false,
-  bool includeSystemPackages = false,
+  bool includeIcon = true,
+  bool includeSystemPackages = true,
 }) =>
-    DevicePackagesPlatformInterfacePlatform.instance.getDevicePackages(
+    DevicePackagesPlatformInterface.instance.getDevicePackages(
       includeIcon: includeIcon,
       includeSystemPackages: includeSystemPackages,
     );
@@ -20,10 +26,10 @@ Future<List<DevicePackage>> getDevicePackages({
 /// - If [includeIcon] is true, it will return the [DevicePackage] with [icon] set to a non-null value representing the icon bitmap bytes.
 /// - If [includeSystemPackages] is true, it will return internal packages (if supported in the host platform).
 Stream<DevicePackage> getDevicePackagesAsStream({
-  bool includeIcon = false,
-  bool includeSystemPackages = false,
+  bool includeIcon = true,
+  bool includeSystemPackages = true,
 }) =>
-    DevicePackagesPlatformInterfacePlatform.instance.getDevicePackagesAsStream(
+    DevicePackagesPlatformInterface.instance.getDevicePackagesAsStream(
       includeIcon: includeIcon,
       includeSystemPackages: includeSystemPackages,
     );
@@ -37,7 +43,7 @@ Stream<DevicePackage> didUninstallPackage({
   bool includeIcon = false,
   bool includeSystemPackages = false,
 }) =>
-    DevicePackagesPlatformInterfacePlatform.instance.didUninstallPackage(
+    DevicePackagesPlatformInterface.instance.didUninstallPackage(
       includeIcon: includeIcon,
       includeSystemPackages: includeSystemPackages,
     );
@@ -51,7 +57,7 @@ Stream<DevicePackage> didInstallPackage({
   bool includeIcon = false,
   bool includeSystemPackages = false,
 }) =>
-    DevicePackagesPlatformInterfacePlatform.instance.didInstallPackage(
+    DevicePackagesPlatformInterface.instance.didInstallPackage(
       includeIcon: includeIcon,
       includeSystemPackages: includeSystemPackages,
     );

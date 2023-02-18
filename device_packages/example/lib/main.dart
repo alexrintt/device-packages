@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
 
-import 'package:flutter/services.dart';
+import 'package:device_packages/device_packages.dart' show DevicePackage;
 import 'package:device_packages/device_packages.dart' as packageManager;
+
+import 'package:flutter/material.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,13 +23,13 @@ class _MyAppState extends State<MyApp> {
     initPlatformState();
   }
 
+  late Stream<DevicePackage> didInstallPackageStream;
+  late Stream<DevicePackage> didUninstallPackageStream;
+
   // Platform messages are asynchronous, so we initialize in an async method.
   Future<void> initPlatformState() async {
-    final devicePackagesPlugin = packageManager.didInstallPackage();
-
-    devicePackagesPlugin.listen((package) {
-      print('FROM FLUTTER: A new package was installed: ${package.id}');
-    });
+    //didInstallPackageStream = packageManager.didInstallPackage();
+    didUninstallPackageStream = packageManager.didUninstallPackage();
   }
 
   @override
@@ -38,8 +39,55 @@ class _MyAppState extends State<MyApp> {
         appBar: AppBar(
           title: const Text('Plugin example app'),
         ),
-        body: const Center(
-          child: Text('Running...'),
+        body: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            StreamBuilder<DevicePackage>(
+              stream: didUninstallPackageStream,
+              builder: (
+                BuildContext context,
+                AsyncSnapshot<DevicePackage> snapshot,
+              ) {
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: Text('No packages were uninstalled...'),
+                  );
+                }
+
+                return ListTile(
+                  leading: snapshot.data?.icon != null
+                      ? Image.memory(snapshot.data!.icon!)
+                      : null,
+                  title:
+                      Text('Last uninstalled app was: ${snapshot.data?.name}'),
+                  subtitle: Text('Package ID: ${snapshot.data?.id}'),
+                );
+              },
+            ),
+            const Divider(),
+            // StreamBuilder<DevicePackage>(
+            //   stream: didInstallPackageStream,
+            //   builder: (
+            //     BuildContext context,
+            //     AsyncSnapshot<DevicePackage> snapshot,
+            //   ) {
+            //     if (!snapshot.hasData) {
+            //       return const Center(
+            //         child: Text('No packages were installed...'),
+            //       );
+            //     }
+            //
+            //     return ListTile(
+            //       leading: snapshot.data?.icon != null
+            //           ? Image.memory(snapshot.data!.icon!)
+            //           : null,
+            //       title:
+            //           Text('Last uninstalled app was: ${snapshot.data?.name}'),
+            //       subtitle: Text('Package ID: ${snapshot.data?.id}'),
+            //     );
+            //   },
+            // ),
+          ],
         ),
       ),
     );

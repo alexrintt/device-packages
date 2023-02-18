@@ -7,20 +7,26 @@ import './device_packages_platform_interface.dart';
 
 /// An implementation of [DevicePackagesPlatformInterfacePlatform] that uses method channels.
 class MethodChannelDevicePackagesPlatformInterface
-    extends DevicePackagesPlatformInterfacePlatform {
+    extends DevicePackagesPlatformInterface {
   /// The method channel used to interact with the native platform.
   @visibleForTesting
   final MethodChannel methodChannel = const MethodChannel(
-    'io.alexrintt.device_packages.platform_interface.default/methodchannel',
+    'io.alexrintt.device_packages.platform_interface.methodchannel/default',
   );
 
-  /// The event channel used to interact with the native platform.
+  /// The event channels used to interact with the native platform.
   @visibleForTesting
-  final EventChannel eventChannel = const EventChannel(
-    'io.alexrintt.device_packages.platform_interface.default/eventchannel',
+  final EventChannel installEventChannel = const EventChannel(
+    'io.alexrintt.device_packages.platform_interface.eventchannel/install',
   );
-
-  int _generateId() => UniqueKey().hashCode;
+  @visibleForTesting
+  final EventChannel uninstallEventChannel = const EventChannel(
+    'io.alexrintt.device_packages.platform_interface.eventchannel/uninstall',
+  );
+  @visibleForTesting
+  final EventChannel getDevicePackagesEventChannel = const EventChannel(
+    'io.alexrintt.device_packages.platform_interface.eventchannel/getdevicepackages',
+  );
 
   @override
   Stream<DevicePackage> getDevicePackagesAsStream({
@@ -28,15 +34,44 @@ class MethodChannelDevicePackagesPlatformInterface
     bool includeSystemPackages = false,
   }) {
     final Map<String, dynamic> args = <String, dynamic>{
-      'eventName': 'getDevicePackagesAsStream',
       'includeIcon': '$includeIcon',
       'includeSystemPackages': '$includeSystemPackages',
-      'listenerId': '${_generateId()}',
     };
 
-    return eventChannel
+    return getDevicePackagesEventChannel
         .receiveBroadcastStream(args)
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());
+  }
+
+  @override
+  Future<List<DevicePackage>> getDevicePackages({
+    bool includeIcon = false,
+    bool includeSystemPackages = false,
+  }) async {
+    final Map<String, dynamic> args = <String, dynamic>{
+      'includeIcon': '$includeIcon',
+      'includeSystemPackages': '$includeSystemPackages',
+    };
+
+    final List<dynamic>? packages = await methodChannel
+        .invokeMethod<List<dynamic>>('getDevicePackages', args);
+
+    return Stream<dynamic>.fromIterable(packages!)
+        .transform(_RawBroadcastEventToDevicePackageStreamTransformer())
+        .toList();
+  }
+
+  @override
+  Future<int> getDevicePackageCount(
+      {bool includeSystemPackages = false}) async {
+    final Map<String, dynamic> args = <String, dynamic>{
+      'includeSystemPackages': '$includeSystemPackages',
+    };
+
+    final int? packageCount =
+        await methodChannel.invokeMethod<int>('getDevicePackageCount', args);
+
+    return packageCount!;
   }
 
   @override
@@ -45,13 +80,11 @@ class MethodChannelDevicePackagesPlatformInterface
     bool includeSystemPackages = false,
   }) {
     final Map<String, dynamic> args = <String, dynamic>{
-      'eventName': 'didInstallPackage',
       'includeIcon': '$includeIcon',
       'includeSystemPackages': '$includeSystemPackages',
-      'listenerId': '${_generateId()}',
     };
 
-    return eventChannel
+    return installEventChannel
         .receiveBroadcastStream(args)
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());
   }
@@ -62,13 +95,11 @@ class MethodChannelDevicePackagesPlatformInterface
     bool includeSystemPackages = false,
   }) {
     final Map<String, dynamic> args = <String, dynamic>{
-      'eventName': 'didUninstallPackage',
       'includeIcon': '$includeIcon',
       'includeSystemPackages': '$includeSystemPackages',
-      'listenerId': '${_generateId()}',
     };
 
-    return eventChannel
+    return uninstallEventChannel
         .receiveBroadcastStream(args)
         .transform(_RawBroadcastEventToDevicePackageStreamTransformer());
   }

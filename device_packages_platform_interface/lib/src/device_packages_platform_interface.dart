@@ -3,25 +3,24 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'device_packages_platform_interface_method_channel.dart';
 
-abstract class DevicePackagesPlatformInterfacePlatform
-    extends PlatformInterface {
-  /// Constructs a DevicePackagesPlatformInterfacePlatform.
-  DevicePackagesPlatformInterfacePlatform() : super(token: _token);
+abstract class DevicePackagesPlatformInterface extends PlatformInterface {
+  /// Constructs a DevicePackagesPlatformInterface.
+  DevicePackagesPlatformInterface() : super(token: _token);
 
   static final Object _token = Object();
 
-  static DevicePackagesPlatformInterfacePlatform _instance =
+  static DevicePackagesPlatformInterface _instance =
       MethodChannelDevicePackagesPlatformInterface();
 
-  /// The default instance of [DevicePackagesPlatformInterfacePlatform] to use.
+  /// The default instance of [DevicePackagesPlatformInterface] to use.
   ///
-  /// Defaults to [MethodChannelDevicePackagesPlatformInterface].
-  static DevicePackagesPlatformInterfacePlatform get instance => _instance;
+  /// Defaults to [MethodChannelDevicePackagesPlatformInterfaceInterface].
+  static DevicePackagesPlatformInterface get instance => _instance;
 
   /// Platform-specific implementations should set this with their own
-  /// platform-specific class that extends [DevicePackagesPlatformInterfacePlatform] when
+  /// platform-specific class that extends [DevicePackagesPlatformInterface] when
   /// they register themselves.
-  static set instance(DevicePackagesPlatformInterfacePlatform instance) {
+  static set instance(DevicePackagesPlatformInterface instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
   }
@@ -29,11 +28,14 @@ abstract class DevicePackagesPlatformInterfacePlatform
   Future<List<DevicePackage>> getDevicePackages({
     bool includeIcon = false,
     bool includeSystemPackages = false,
-  }) =>
-      getDevicePackagesAsStream(includeIcon: includeIcon).toList();
+  });
 
   Stream<DevicePackage> getDevicePackagesAsStream({
     bool includeIcon = false,
+    bool includeSystemPackages = false,
+  });
+
+  Future<int> getDevicePackageCount({
     bool includeSystemPackages = false,
   });
 

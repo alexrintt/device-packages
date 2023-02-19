@@ -31,8 +31,8 @@ class DevicePackagesPlatformInterfaceMethodChannel
     bool onlyOpenablePackages = kDefaultOnlyOpenablePackages,
   }) async {
     final Map<String, dynamic> args = <String, dynamic>{
-      'includeSystemPackages': '$includeSystemPackages',
-      'onlyOpenablePackages': '$includeSystemPackages',
+      'includeSystemPackages': includeSystemPackages,
+      'onlyOpenablePackages': includeSystemPackages,
     };
 
     return methodChannel
@@ -47,9 +47,9 @@ class DevicePackagesPlatformInterfaceMethodChannel
     bool onlyOpenablePackages = kDefaultOnlyOpenablePackages,
   }) async {
     final Map<String, dynamic> args = <String, dynamic>{
-      'includeIcon': '$includeIcon',
-      'includeSystemPackages': '$includeSystemPackages',
-      'onlyOpenablePackages': '$onlyOpenablePackages',
+      'includeIcon': includeIcon,
+      'includeSystemPackages': includeSystemPackages,
+      'onlyOpenablePackages': onlyOpenablePackages,
     };
 
     return methodChannel
@@ -65,9 +65,9 @@ class DevicePackagesPlatformInterfaceMethodChannel
     bool onlyOpenablePackages = kDefaultOnlyOpenablePackages,
   }) {
     final Map<String, dynamic> args = <String, dynamic>{
-      'includeIcon': '$includeIcon',
-      'includeSystemPackages': '$includeSystemPackages',
-      'onlyOpenablePackages': '$onlyOpenablePackages',
+      'includeIcon': includeIcon,
+      'includeSystemPackages': includeSystemPackages,
+      'onlyOpenablePackages': onlyOpenablePackages,
     };
 
     return getInstalledPackagesEventChannel

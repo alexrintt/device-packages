@@ -38,11 +38,12 @@ class DevicePackages {
   ///
   /// Useful to show progress of a loading indicator.
   static Future<int> getInstalledPackageCount({
-    bool includeIcon = false,
-    bool includeSystemPackages = false,
+    bool includeSystemPackages = kDefaultIncludeSystemPackages,
+    bool onlyOpenablePackages = kDefaultOnlyOpenablePackages,
   }) =>
       DevicePackagesPlatformInterface.instance.getInstalledPackageCount(
         includeSystemPackages: includeSystemPackages,
+        onlyOpenablePackages: onlyOpenablePackages,
       );
 
   /// Starting loading app package list and returns a [Stream]
@@ -53,12 +54,14 @@ class DevicePackages {
   /// - If [includeIcon] is true, it will return the [PackageInfo] with [icon] set to a non-null value representing the icon bitmap bytes.
   /// - If [includeSystemPackages] is true, it will return internal packages (if supported in the host platform).
   static Stream<PackageInfo> getInstalledPackagesAsStream({
-    bool includeIcon = false,
-    bool includeSystemPackages = false,
+    bool includeIcon = kDefaultIncludeIcon,
+    bool includeSystemPackages = kDefaultIncludeSystemPackages,
+    bool onlyOpenablePackages = kDefaultOnlyOpenablePackages,
   }) =>
       DevicePackagesPlatformInterface.instance.getInstalledPackagesAsStream(
         includeIcon: includeIcon,
         includeSystemPackages: includeSystemPackages,
+        onlyOpenablePackages: onlyOpenablePackages,
       );
 
   static Future<PackageInfo> getPackage(

@@ -9,6 +9,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
@@ -23,9 +24,9 @@ import io.flutter.plugin.common.MethodChannel.Result
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-const val DEFAULT_INCLUDE_SYSTEM_PACKAGES: Boolean = false;
-const val DEFAULT_INCLUDE_ICON: Boolean = false;
-const val DEFAULT_ONLY_OPENABLE_PACKAGES: Boolean = false;
+const val DEFAULT_INCLUDE_SYSTEM_PACKAGES: Boolean = false
+const val DEFAULT_INCLUDE_ICON: Boolean = false
+const val DEFAULT_ONLY_OPENABLE_PACKAGES: Boolean = false
 
 const val NO_PACKAGE_METADATA: Int = 0x0
 const val GET_PACKAGE_METADATA_FLAG: Int = PackageManager.GET_META_DATA
@@ -520,6 +521,7 @@ class PackagesStreamHandler(private val plugin: DevicePackagesAndroidPlugin) :
 
     if (receiver != null) {
       plugin.context.unregisterReceiver(receiver)
+      receiver = null
     }
   }
 }
@@ -530,19 +532,29 @@ private fun bitmapToBytes(bitmap: Bitmap): ByteArray {
   return byteArrayOutputStream.toByteArray()
 }
 
-private fun drawableToBitmap(drawable: Drawable): Bitmap {
-  val bitmap: Bitmap = Bitmap
-    .createBitmap(
-      drawable.intrinsicWidth,
-      drawable.intrinsicHeight,
-      Bitmap.Config.RGB_565
-    )
-
+fun drawableToBitmap(drawable: Drawable): Bitmap {
+  if (drawable is BitmapDrawable) {
+    val bitmapDrawable: BitmapDrawable = drawable
+    if (bitmapDrawable.bitmap != null) {
+      return bitmapDrawable.bitmap
+    }
+  }
+  val bitmap: Bitmap =
+    if (drawable.intrinsicWidth <= 0 || drawable.intrinsicHeight <= 0) {
+      Bitmap.createBitmap(
+        1,
+        1,
+        Bitmap.Config.ARGB_8888
+      ) // Single color bitmap will be created of 1x1 pixel
+    } else {
+      Bitmap.createBitmap(
+        drawable.intrinsicWidth,
+        drawable.intrinsicHeight,
+        Bitmap.Config.ARGB_8888
+      )
+    }
   val canvas = Canvas(bitmap)
-  drawable.setBounds(
-    0, 0, drawable.intrinsicWidth,
-    drawable.intrinsicHeight
-  )
+  drawable.setBounds(0, 0, canvas.width, canvas.height)
   drawable.draw(canvas)
   return bitmap
 }

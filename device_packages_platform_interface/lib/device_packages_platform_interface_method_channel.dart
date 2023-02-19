@@ -76,8 +76,10 @@ class DevicePackagesPlatformInterfaceMethodChannel
   }
 
   @override
-  Future<PackageInfo> getPackage(String packageId,
-      {bool includeIcon = kDefaultIncludeIcon}) {
+  Future<PackageInfo> getPackage(
+    String packageId, {
+    bool includeIcon = kDefaultIncludeIcon,
+  }) {
     try {
       final Map<String, dynamic> args = <String, dynamic>{
         'packageId': packageId,

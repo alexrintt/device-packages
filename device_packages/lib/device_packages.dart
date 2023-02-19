@@ -61,8 +61,10 @@ class DevicePackages {
         includeSystemPackages: includeSystemPackages,
       );
 
-  static Future<PackageInfo> getPackage(String packageId,
-          {bool includeIcon = kDefaultIncludeIcon}) =>
+  static Future<PackageInfo> getPackage(
+    String packageId, {
+    bool includeIcon = kDefaultIncludeIcon,
+  }) =>
       DevicePackagesPlatformInterface.instance
           .getPackage(packageId, includeIcon: includeIcon);
 

@@ -174,7 +174,7 @@ fun PackageInfo.toMap(
     "id" to this.packageName,
     "name" to context?.packageManager?.getApplicationLabel(this.applicationInfo),
     "installerPath" to this.applicationInfo.sourceDir,
-    "isSystemPackage" to (this.applicationInfo.flags and SYSTEM_APP_FLAG != 0)
+    "isSystemPackage" to (this.applicationInfo.flags and SYSTEM_APP_FLAG != 0),
     "icon" to
       if (includeIcon) {
         bitmapToBytes(

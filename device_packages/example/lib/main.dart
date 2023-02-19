@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:device_packages/device_packages.dart' show DevicePackage;
-import 'package:device_packages/device_packages.dart' as packageManager;
+import 'package:device_packages/device_packages.dart';
 
 import 'package:flutter/material.dart';
 
@@ -20,16 +19,25 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    initPlatformState();
+    _initializePackageEventsStream();
   }
 
-  late Stream<DevicePackage> didInstallPackageStream;
-  late Stream<DevicePackage> didUninstallPackageStream;
+  late Stream<Map<PackageAction, PackageInfo>> _packageEventsStream;
 
-  // Platform messages are asynchronous, so we initialize in an async method.
-  Future<void> initPlatformState() async {
-    //didInstallPackageStream = packageManager.didInstallPackage();
-    didUninstallPackageStream = packageManager.didUninstallPackage();
+  Future<void> _initializePackageEventsStream() async {
+    _packageEventsStream = DevicePackages.listenToPackageEvents()
+        .asyncMap<Map<PackageAction, PackageInfo>>(
+      (PackageEvent event) async {
+        if (await DevicePackages.isPackageInstalled(event.packageId)) {
+          return <PackageAction, PackageInfo>{
+            event.action: await DevicePackages.getPackage(event.packageId),
+          };
+        }
+        return <PackageAction, PackageInfo>{
+          event.action: PackageInfo(id: event.packageId),
+        };
+      },
+    );
   }
 
   @override
@@ -42,51 +50,33 @@ class _MyAppState extends State<MyApp> {
         body: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            StreamBuilder<DevicePackage>(
-              stream: didUninstallPackageStream,
+            StreamBuilder<Map<PackageAction, PackageInfo>>(
+              stream: _packageEventsStream,
               builder: (
                 BuildContext context,
-                AsyncSnapshot<DevicePackage> snapshot,
+                AsyncSnapshot<Map<PackageAction, PackageInfo>> snapshot,
               ) {
                 if (!snapshot.hasData) {
                   return const Center(
-                    child: Text('No packages were uninstalled...'),
+                    child: Text('No events yet...'),
                   );
                 }
 
+                final PackageAction action = snapshot.data!.keys.first;
+                final PackageInfo devicePackage = snapshot.data!.values.first;
+
                 return ListTile(
-                  leading: snapshot.data?.icon != null
-                      ? Image.memory(snapshot.data!.icon!)
+                  leading: devicePackage.icon != null
+                      ? Image.memory(devicePackage.icon!)
                       : null,
-                  title:
-                      Text('Last uninstalled app was: ${snapshot.data?.name}'),
-                  subtitle: Text('Package ID: ${snapshot.data?.id}'),
+                  title: Text('App name: ${devicePackage.name}'),
+                  subtitle: Text(
+                    'Last event: ${action.name} | Package ID: ${devicePackage.id}',
+                  ),
                 );
               },
             ),
             const Divider(),
-            // StreamBuilder<DevicePackage>(
-            //   stream: didInstallPackageStream,
-            //   builder: (
-            //     BuildContext context,
-            //     AsyncSnapshot<DevicePackage> snapshot,
-            //   ) {
-            //     if (!snapshot.hasData) {
-            //       return const Center(
-            //         child: Text('No packages were installed...'),
-            //       );
-            //     }
-            //
-            //     return ListTile(
-            //       leading: snapshot.data?.icon != null
-            //           ? Image.memory(snapshot.data!.icon!)
-            //           : null,
-            //       title:
-            //           Text('Last uninstalled app was: ${snapshot.data?.name}'),
-            //       subtitle: Text('Package ID: ${snapshot.data?.id}'),
-            //     );
-            //   },
-            // ),
           ],
         ),
       ),

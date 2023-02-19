@@ -1,5 +1,5 @@
 name: device_packages_example
-description: Demonstrates how to use the device_packages plugin.
+description: Demonstrates how to use the [device_packages] plugin.
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -15,9 +15,6 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
-  flutter:
-    sdk: flutter
-
   device_packages:
     # When depending on this package from a real application you should use:
     #   device_packages: ^x.y.z
@@ -26,9 +23,8 @@ dependencies:
     # the parent directory to use the current plugin's version.
     path: ../
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.2
+  flutter:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:

@@ -10,8 +10,9 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Build
-import android.util.Log
+import android.provider.Settings
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
@@ -20,6 +21,29 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.io.ByteArrayOutputStream
+import java.io.File
+
+const val DEFAULT_INCLUDE_SYSTEM_PACKAGES: Boolean = false;
+const val DEFAULT_INCLUDE_ICON: Boolean = false;
+const val DEFAULT_ONLY_OPENABLE_PACKAGES: Boolean = false;
+
+const val NO_PACKAGE_METADATA: Int = 0x0
+const val GET_PACKAGE_METADATA_FLAG: Int = PackageManager.GET_META_DATA
+const val SYSTEM_APP_FLAG: Int =
+  ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP
+
+const val MISSING_PERMISSION_TO_REQUEST_INSTALL_PACKAGE_ERROR: String =
+  "MissingPermissionToRequestInstallPackage"
+
+const val PACKAGE_NOT_FOUND_EXCEPTION: String = "PackageNotFoundException"
+const val UNSUCCESSFUL_PACKAGE_INSTALL_REQUEST_EXCEPTION: String =
+  "UnsuccessfulPackageInstallRequestException"
+const val INVALID_INSTALLER_EXCEPTION: String = "InvalidInstallerException"
+const val PACKAGE_IS_NOT_OPENABLE_EXCEPTION: String =
+  "PackageIsNotOpenableException"
+
+
+const val APK_MIME_TYPE: String = "application/vnd.android.package-archive"
 
 /** DevicePackagesAndroidPlugin */
 class DevicePackagesAndroidPlugin : FlutterPlugin {
@@ -28,11 +52,10 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
   /// This local reference serves to register the plugin with the Flutter Engine and unregister it
   /// when the Flutter Engine is detached from the Activity
   private lateinit var channel: MethodChannel
-  private lateinit var installEventChannel: EventChannel
-  private lateinit var uninstallEventChannel: EventChannel
-  private lateinit var getDevicePackagesEventChannel: EventChannel
+  private lateinit var packageEventChannels: EventChannel
+  private lateinit var getInstalledPackagesEventChannel: EventChannel
 
-  var context: Context? = null
+  lateinit var context: Context
 
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     context = flutterPluginBinding.applicationContext
@@ -47,37 +70,30 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
       )
     )
 
-    installEventChannel = EventChannel(
+    packageEventChannels = EventChannel(
       flutterPluginBinding.binaryMessenger,
-      "io.alexrintt.device_packages.platform_interface.eventchannel/install"
+      "io.alexrintt.device_packages.platform_interface.eventchannel/packages"
     )
-    installEventChannel.setStreamHandler(DidInstallPackageStreamHandler(this))
+    packageEventChannels.setStreamHandler(PackagesStreamHandler(this))
 
-    uninstallEventChannel = EventChannel(
+    getInstalledPackagesEventChannel = EventChannel(
       flutterPluginBinding.binaryMessenger,
-      "io.alexrintt.device_packages.platform_interface.eventchannel/uninstall"
+      "io.alexrintt.device_packages.platform_interface.eventchannel/getinstalledpackages"
     )
-    uninstallEventChannel.setStreamHandler(DidUninstallPackageStreamHandler(this))
-
-    getDevicePackagesEventChannel = EventChannel(
-      flutterPluginBinding.binaryMessenger,
-      "io.alexrintt.device_packages.platform_interface.eventchannel/getdevicepackages"
-    )
-    getDevicePackagesEventChannel.setStreamHandler(
-      GetDevicePackagesStreamHandler(this)
+    getInstalledPackagesEventChannel.setStreamHandler(
+      GetInstalledPackagesStreamHandler(this)
     )
   }
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     channel.setMethodCallHandler(null)
 
-    installEventChannel.setStreamHandler(null)
-    uninstallEventChannel.setStreamHandler(null)
-    getDevicePackagesEventChannel.setStreamHandler(null)
+    packageEventChannels.setStreamHandler(null)
+    getInstalledPackagesEventChannel.setStreamHandler(null)
   }
 }
 
-class GetDevicePackagesStreamHandler(private val plugin: DevicePackagesAndroidPlugin) :
+class GetInstalledPackagesStreamHandler(private val plugin: DevicePackagesAndroidPlugin) :
   EventChannel.StreamHandler {
   private var eventSink: EventChannel.EventSink? = null
 
@@ -87,47 +103,40 @@ class GetDevicePackagesStreamHandler(private val plugin: DevicePackagesAndroidPl
     registerListener(events)
 
     val includeSystemPackages: Boolean =
-      parseArg(arguments, "includeSystemPackages") ?: false
+      parseArg(arguments, "includeSystemPackages")
+        ?: DEFAULT_INCLUDE_SYSTEM_PACKAGES
     val includeIcon: Boolean =
-      parseArg(arguments, "includeIcon") ?: true
-
-    if (plugin.context == null) {
-      eventSink?.error(
-        DevicePackagesAndroidPluginMethodCallHandler.APPLICATION_CONTEXT_IS_NULL,
-        "Could not fetch device packages, context is [null].",
-        arguments
-      )
-      return cancelListener()
-    }
-
-    if (plugin.context!!.packageManager == null) {
-      eventSink?.error(
-        DevicePackagesAndroidPluginMethodCallHandler.APPLICATION_PACKAGE_MANAGER_IS_NULL,
-        "Could not fetch device packages, the package manager is [null].",
-        arguments
-      )
-      return cancelListener()
-    }
+      parseArg(arguments, "includeIcon") ?: DEFAULT_INCLUDE_ICON
+    val onlyOpenablePackages: Boolean =
+      parseArg(arguments, "onlyOpenablePackages")
+        ?: DEFAULT_ONLY_OPENABLE_PACKAGES
 
     val flags: Int = PackageManager.GET_META_DATA
 
-    val packages: List<PackageInfo> = if (Build.VERSION.SDK_INT >= 33) {
-      plugin.context!!.packageManager!!.getInstalledPackages(
-        PackageManager.PackageInfoFlags.of(
-          flags.toLong()
+    val packages: List<PackageInfo> =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        plugin.context.packageManager!!.getInstalledPackages(
+          PackageManager.PackageInfoFlags.of(
+            flags.toLong()
+          )
         )
-      )
-    } else {
-      @Suppress("DEPRECATION") // we are handling when API >= 33.
-      plugin.context!!.packageManager!!.getInstalledPackages(flags)
-    }
+      } else {
+        @Suppress("DEPRECATION") // we are handling when API >= Build.VERSION_CODES.TIRAMISU.
+        plugin.context.packageManager!!.getInstalledPackages(flags)
+      }
 
     packages.forEach skip@{
       val isSystemPackage =
-        (it.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
+        (it.applicationInfo?.flags ?: 0) and SYSTEM_APP_FLAG != 0
 
       if (isSystemPackage && !includeSystemPackages) {
         return@skip
+      }
+
+      if (onlyOpenablePackages) {
+        if (plugin.context.packageManager.getLaunchIntentForPackage(it.packageName) == null) {
+          return@skip
+        }
       }
 
       if (eventSink == null) {
@@ -135,25 +144,7 @@ class GetDevicePackagesStreamHandler(private val plugin: DevicePackagesAndroidPl
         return cancelListener()
       }
 
-      eventSink?.success(
-        mapOf(
-          "id" to it.packageName,
-          "name" to plugin.context!!.packageManager.getApplicationLabel(it.applicationInfo),
-          "path" to it.applicationInfo.sourceDir,
-          "icon" to
-            if (includeIcon) {
-              bitmapToBytes(
-                drawableToBitmap(
-                  plugin.context!!.packageManager.getApplicationIcon(
-                    it.applicationInfo
-                  )
-                )
-              )
-            } else {
-              null
-            }
-        )
-      )
+      eventSink?.success(it.toMap(plugin.context, includeIcon))
     }
 
     cancelListener()
@@ -174,129 +165,285 @@ class GetDevicePackagesStreamHandler(private val plugin: DevicePackagesAndroidPl
   }
 }
 
+fun PackageInfo.toMap(
+  context: Context? = null,
+  includeIcon: Boolean = false
+): Map<String, *> {
+  assert(if (includeIcon) context != null else true) { "Context must not be null if [includeIcon] is [true]." }
+  return mapOf(
+    "id" to this.packageName,
+    "name" to context?.packageManager?.getApplicationLabel(this.applicationInfo),
+    "installerPath" to this.applicationInfo.sourceDir,
+    "isSystemPackage" to (this.applicationInfo.flags and SYSTEM_APP_FLAG != 0)
+    "icon" to
+      if (includeIcon) {
+        bitmapToBytes(
+          drawableToBitmap(
+            context!!.packageManager.getApplicationIcon(
+              this.applicationInfo
+            )
+          )
+        )
+      } else {
+        null
+      }
+  )
+}
+
 class DevicePackagesAndroidPluginMethodCallHandler(private val plugin: DevicePackagesAndroidPlugin) :
   MethodCallHandler {
   override fun onMethodCall(call: MethodCall, result: Result) {
     when (call.method) {
-      "getDevicePackages" -> getDevicePackages(call, result)
-      "getDevicePackageCount" -> getDevicePackageCount(call, result)
+      "getInstalledPackages" -> getInstalledPackages(call, result)
+      "getInstalledPackageCount" -> getInstalledPackageCount(call, result)
+      "getPackage" -> getPackage(call, result)
+      "isPackageInstalled" -> isPackageInstalled(call, result)
+      "installPackage" -> installPackage(call, result)
+      "uninstallPackage" -> uninstallPackage(call, result)
+      "openPackageSettings" -> openPackageSettings(call, result)
+      "openPackage" -> openPackage(call, result)
       else -> result.notImplemented()
     }
   }
 
-  companion object {
-    const val APPLICATION_CONTEXT_IS_NULL: String =
-      "APPLICATION_CONTEXT_IS_NULL"
-    const val APPLICATION_PACKAGE_MANAGER_IS_NULL: String =
-      "APPLICATION_CONTEXT_IS_NULL"
+  private fun openPackage(call: MethodCall, result: Result) {
+    val packageName: String = parseArg<String>(call.arguments, "packageId")!!
+
+    val launchIntent: Intent =
+      plugin.context.packageManager.getLaunchIntentForPackage(packageName)
+        ?: return result.error(
+          PACKAGE_IS_NOT_OPENABLE_EXCEPTION,
+          "The package [$packageName] has no launch intent, so it's not possible to open.",
+          call.arguments,
+        )
+
+    plugin.context.startActivity(launchIntent)
   }
 
-  private fun getDevicePackages(call: MethodCall, result: Result) {
-    val includeSystemPackages: Boolean =
-      parseArg(call.arguments, "includeSystemPackages") ?: false
-    val includeIcon: Boolean =
-      parseArg(call.arguments, "includeIcon") ?: true
+  private fun openPackageSettings(call: MethodCall, result: Result) {
+    openPackageSettings(parseArg<String>(call.arguments, "packageId")!!)
+    result.success(null)
+  }
 
-    if (plugin.context == null) {
+  private fun openPackageSettings(packageName: String) {
+    val appSettingsIntent: Intent =
+      Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.parse("package:$packageName")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+
+    plugin.context.startActivity(appSettingsIntent)
+  }
+
+  private fun uninstallPackage(packageName: String) {
+    val appUninstallIntent = Intent(Intent.ACTION_DELETE).apply {
+      data = Uri.parse("package:$packageName")
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    plugin.context.startActivity(appUninstallIntent)
+  }
+
+  private fun uninstallPackage(call: MethodCall, result: Result) {
+    uninstallPackage(parseArg<String>(call.arguments, "packageId")!!)
+    result.success(null)
+  }
+
+  private fun installPackage(call: MethodCall, result: Result) {
+    if (!canRequestPackageInstalls()) {
       return result.error(
-        APPLICATION_CONTEXT_IS_NULL,
-        "Could not fetch device packages, context is [null].",
+        MISSING_PERMISSION_TO_REQUEST_INSTALL_PACKAGE_ERROR,
+        "Apps targeting API level 26 or newer must hold this permission in order to use Intent.ACTION_INSTALL_PACKAGE or the PackageInstaller API.",
         call.arguments
       )
     }
 
-    if (plugin.context!!.packageManager == null) {
+    val installerUri: String? = parseArg<String>(call.arguments, "installerUri")
+    val installerPath: String? =
+      parseArg<String>(call.arguments, "installerPath")
+
+    assert(installerUri != null || installerPath != null) { "You must set [installerUri] or [installerPath] when calling [installPackage]" }
+
+    val apkUri =
+      if (installerUri != null)
+        Uri.parse(installerUri)
+      else Uri.fromFile(
+        File(installerPath!!)
+      )
+
+    val type: String? = plugin.context.contentResolver.getType(apkUri)
+    val isApk: Boolean = type == APK_MIME_TYPE
+
+    if (!isApk) {
       return result.error(
-        APPLICATION_PACKAGE_MANAGER_IS_NULL,
-        "Could not fetch device packages, the package manager is [null].",
+        INVALID_INSTALLER_EXCEPTION,
+        "When calling [installPackage] on Android, the [installPath] or [installerUri] must be a valid address to an apk file.",
         call.arguments
       )
     }
 
-    val flags: Int = PackageManager.GET_META_DATA
+    try {
+      installPackage(apkUri)
+      result.success(null)
+    } catch (e: SecurityException) {
+      return result.error(
+        UNSUCCESSFUL_PACKAGE_INSTALL_REQUEST_EXCEPTION,
+        "Missing read permissions for uri $apkUri of type $type to request install.",
+        call.arguments
+      )
+    }
+  }
 
-    val packages: List<PackageInfo> = if (Build.VERSION.SDK_INT >= 33) {
-      plugin.context!!.packageManager!!.getInstalledPackages(
-        PackageManager.PackageInfoFlags.of(
-          flags.toLong()
-        )
+  private fun installPackage(uri: Uri) {
+    val installPackageIntent =
+      Intent(Intent.ACTION_VIEW).apply {
+        val flags: Int =
+          Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+        setDataAndType(uri, APK_MIME_TYPE)
+        setFlags(flags)
+      }
+
+    plugin.context.startActivity(installPackageIntent)
+  }
+
+  private fun canRequestPackageInstalls(): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      plugin.context.packageManager.canRequestPackageInstalls()
+    } else {
+      true
+    }
+  }
+
+  private fun getPackage(
+    packageName: String,
+    flags: Int = NO_PACKAGE_METADATA
+  ): PackageInfo {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      plugin.context.packageManager.getPackageInfo(
+        packageName,
+        PackageManager.PackageInfoFlags.of(flags.toLong())
       )
     } else {
-      @Suppress("DEPRECATION") // we are handling when API >= 33.
-      plugin.context!!.packageManager!!.getInstalledPackages(flags)
+      @Suppress("DEPRECATION")
+      plugin.context.packageManager.getPackageInfo(
+        packageName,
+        flags
+      )
     }
+  }
+
+  private fun getPackageOrNull(
+    packageName: String,
+    flags: Int = NO_PACKAGE_METADATA
+  ): PackageInfo? {
+    return try {
+      getPackage(packageName, flags)
+    } catch (e: PackageManager.NameNotFoundException) {
+      null
+    }
+  }
+
+  private fun isPackageInstalled(packageName: String): Boolean =
+    getPackageOrNull(packageName) != null
+
+  private fun isPackageInstalled(call: MethodCall, result: Result) {
+    val packageName: String = parseArg<String>(call.arguments, "packageId")!!
+    result.success(isPackageInstalled(packageName))
+  }
+
+  private fun getPackage(call: MethodCall, result: Result) {
+    val includeIcon: Boolean =
+      parseArg(call.arguments, "includeIcon") ?: DEFAULT_INCLUDE_ICON
+    val packageName: String = parseArg(call.arguments, "packageId")!!
+
+    return try {
+      val packageInfo: PackageInfo = getPackage(packageName)
+      result.success(packageInfo.toMap(plugin.context, includeIcon))
+    } catch (e: PackageManager.NameNotFoundException) {
+      result.error(
+        PACKAGE_NOT_FOUND_EXCEPTION,
+        "The package $packageName was not found, check if you have permissions to access it.",
+        call.arguments
+      )
+    }
+  }
+
+  private fun getInstalledPackages(call: MethodCall, result: Result) {
+    val includeSystemPackages: Boolean =
+      parseArg(call.arguments, "includeSystemPackages")
+        ?: DEFAULT_INCLUDE_SYSTEM_PACKAGES
+    val includeIcon: Boolean =
+      parseArg(call.arguments, "includeIcon") ?: DEFAULT_INCLUDE_ICON
+    val onlyOpenablePackages: Boolean =
+      parseArg(call.arguments, "onlyOpenablePackages")
+        ?: DEFAULT_ONLY_OPENABLE_PACKAGES
+
+    val packages: List<PackageInfo> =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        plugin.context.packageManager!!.getInstalledPackages(
+          PackageManager.PackageInfoFlags.of(
+            GET_PACKAGE_METADATA_FLAG.toLong()
+          )
+        )
+      } else {
+        @Suppress("DEPRECATION") // we are handling when API >= Build.VERSION_CODES.TIRAMISU.
+        plugin.context.packageManager!!.getInstalledPackages(
+          GET_PACKAGE_METADATA_FLAG
+        )
+      }
 
     val eligiblePackages = packages.filter isEligible@{
       val isSystemPackage =
-        (it.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
+        (it.applicationInfo?.flags ?: 0) and SYSTEM_APP_FLAG != 0
 
       if (isSystemPackage && !includeSystemPackages) {
         return@isEligible false
       }
 
+      if (onlyOpenablePackages) {
+        if (plugin.context.packageManager.getLaunchIntentForPackage(it.packageName) == null) {
+          return@isEligible false
+        }
+      }
+
       return@isEligible true
-    }.map {
-      mapOf(
-        "id" to it.packageName,
-        "name" to plugin.context!!.packageManager.getApplicationLabel(it.applicationInfo),
-        "path" to it.applicationInfo.sourceDir,
-        "icon" to
-          if (includeIcon) {
-            bitmapToBytes(
-              drawableToBitmap(
-                plugin.context!!.packageManager.getApplicationIcon(
-                  it.applicationInfo
-                )
-              )
-            )
-          } else {
-            null
-          }
-      )
-    }
+    }.map { it.toMap(plugin.context, includeIcon) }
 
     result.success(eligiblePackages)
   }
 
-  private fun getDevicePackageCount(call: MethodCall, result: Result) {
+  private fun getInstalledPackageCount(call: MethodCall, result: Result) {
     val includeSystemPackages: Boolean =
-      parseArg(call.arguments, "includeSystemPackages") ?: false
+      parseArg(call.arguments, "includeSystemPackages")
+        ?: DEFAULT_INCLUDE_SYSTEM_PACKAGES
+    val onlyOpenablePackages: Boolean =
+      parseArg(call.arguments, "onlyOpenablePackages")
+        ?: DEFAULT_ONLY_OPENABLE_PACKAGES
 
-    if (plugin.context == null) {
-      return result.error(
-        APPLICATION_CONTEXT_IS_NULL,
-        "Could not fetch device packages, context is [null].",
-        call.arguments
-      )
-    }
-
-    if (plugin.context!!.packageManager == null) {
-      return result.error(
-        APPLICATION_PACKAGE_MANAGER_IS_NULL,
-        "Could not fetch device packages, the package manager is [null].",
-        call.arguments
-      )
-    }
-
-    val flags = 0
-
-    val packages: List<PackageInfo> = if (Build.VERSION.SDK_INT >= 33) {
-      plugin.context!!.packageManager!!.getInstalledPackages(
-        PackageManager.PackageInfoFlags.of(
-          flags.toLong()
+    val packages: List<PackageInfo> =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        plugin.context.packageManager!!.getInstalledPackages(
+          PackageManager.PackageInfoFlags.of(
+            NO_PACKAGE_METADATA.toLong()
+          )
         )
-      )
-    } else {
-      @Suppress("DEPRECATION") // we are handling when API >= 33.
-      plugin.context!!.packageManager!!.getInstalledPackages(flags)
-    }
+      } else {
+        @Suppress("DEPRECATION") // we are handling when API >= Build.VERSION_CODES.TIRAMISU.
+        plugin.context.packageManager!!.getInstalledPackages(NO_PACKAGE_METADATA)
+      }
 
     val eligiblePackages = packages.filter isEligible@{
       val isSystemPackage =
-        (it.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
+        (it.applicationInfo?.flags ?: 0) and SYSTEM_APP_FLAG != 0
 
       if (isSystemPackage && !includeSystemPackages) {
         return@isEligible false
+      }
+
+      if (onlyOpenablePackages) {
+        if (plugin.context.packageManager.getLaunchIntentForPackage(it.packageName) == null) {
+          return@isEligible false
+        }
       }
 
       return@isEligible true
@@ -306,47 +453,51 @@ class DevicePackagesAndroidPluginMethodCallHandler(private val plugin: DevicePac
   }
 }
 
-abstract class DidChangePackageListStreamHandler(
-  private val plugin: DevicePackagesAndroidPlugin,
-  private val action: String
-) :
+class PackagesStreamHandler(private val plugin: DevicePackagesAndroidPlugin) :
   EventChannel.StreamHandler {
   private var receiver: BroadcastReceiver? = null
   private var eventSink: EventChannel.EventSink? = null
 
   private val hasListener: Boolean get() = receiver != null || eventSink != null
 
-  override fun onListen(arguments: Any, eventSink: EventChannel.EventSink) {
+  override fun onListen(arguments: Any?, eventSink: EventChannel.EventSink?) {
+    if (eventSink == null) return
+
     if (hasListener) cancelListener()
 
-    val includeSystemPackages: Boolean =
-      parseArg(arguments, "includeSystemPackages") ?: false
-    val includeIcon: Boolean = parseArg(arguments, "includeIcon") ?: true
+    val receiver: BroadcastReceiver = object : BroadcastReceiver() {
+      override fun onReceive(context: Context?, intent: Intent?) {
+        if (intent == null || context == null) return
 
-    val receiver: BroadcastReceiver =
-      DidChangePackageListBroadcastReceiver(
-        eventSink,
-        includeSystemPackages = includeSystemPackages,
-        includeIcon = includeIcon,
-        action = action
-      )
+        val packageName: String? = intent.data?.encodedSchemeSpecificPart
+        val action: String? = when (intent.action) {
+          Intent.ACTION_PACKAGE_ADDED -> "install"
+          Intent.ACTION_PACKAGE_REMOVED -> "uninstall"
+          Intent.ACTION_PACKAGE_REPLACED -> "update"
+          else -> null
+        }
+
+        if (action == null || packageName == null) return
+
+        eventSink.success(
+          mapOf(
+            "packageId" to packageName,
+            "action" to action
+          )
+        )
+      }
+    }
 
     registerListener(receiver, eventSink)
 
-    if (plugin.context == null) {
-      Log.d(
-        "DEVICE_PACKAGES",
-        "Plugin application context is null when calling $action event handler, ignoring."
-      )
-      return cancelListener()
-    }
-
     val intentFilter = IntentFilter().apply {
-      addAction(action)
+      addAction(Intent.ACTION_PACKAGE_ADDED)
+      addAction(Intent.ACTION_PACKAGE_REMOVED)
+      addAction(Intent.ACTION_PACKAGE_REPLACED)
       addDataScheme("package")
     }
 
-    plugin.context!!.registerReceiver(receiver, intentFilter)
+    plugin.context.registerReceiver(receiver, intentFilter)
   }
 
   override fun onCancel(arguments: Any?) = cancelListener()
@@ -368,88 +519,9 @@ abstract class DidChangePackageListStreamHandler(
     }
 
     if (receiver != null) {
-      plugin.context?.unregisterReceiver(receiver)
+      plugin.context.unregisterReceiver(receiver)
     }
   }
-}
-
-class DidInstallPackageStreamHandler(plugin: DevicePackagesAndroidPlugin) :
-  DidChangePackageListStreamHandler(plugin, Intent.ACTION_PACKAGE_ADDED)
-
-class DidUninstallPackageStreamHandler(plugin: DevicePackagesAndroidPlugin) :
-  DidChangePackageListStreamHandler(plugin, Intent.ACTION_PACKAGE_REMOVED)
-
-class DidChangePackageListBroadcastReceiver(
-  private val eventSink: EventChannel.EventSink,
-  private val includeSystemPackages: Boolean,
-  private val includeIcon: Boolean,
-  private val action: String
-) :
-  BroadcastReceiver() {
-
-  override fun onReceive(context: Context?, intent: Intent?) {
-    if (intent == null || context == null) return
-
-    val sourceAction: String? = intent.action
-    val packageName: String? = intent.data?.encodedSchemeSpecificPart
-
-    if (sourceAction == null || packageName == null) return
-
-    if (sourceAction != action) {
-      Log.e(
-        "WARNING",
-        "[DidChangePackageListBroadcastReceiver] received an intent that is not [$action], this is probably being used in the wrong intent builder."
-      )
-      return
-    }
-
-    val flags: Int = PackageManager.GET_META_DATA
-
-    val packageInfo: PackageInfo? = try {
-      if (Build.VERSION.SDK_INT >= 33) {
-        context.packageManager.getPackageInfo(
-          packageName,
-          PackageManager.PackageInfoFlags.of(flags.toLong())
-        )
-      } else {
-        @Suppress("DEPRECATION") // we are handling when API >= 33.
-        context.packageManager.getPackageInfo(packageName, flags)
-      }
-    } catch (e: PackageManager.NameNotFoundException) {
-      null
-    }
-
-    val isSystemPackage =
-      (packageInfo?.applicationInfo?.flags
-        ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0
-
-    if (isSystemPackage && !includeSystemPackages) return
-
-    val icon: ByteArray? = try {
-      if (includeIcon)
-        context.packageManager.getApplicationIcon(packageName).let {
-          bitmapToBytes(drawableToBitmap(it))
-        }
-      else
-        null
-    } catch (e: PackageManager.NameNotFoundException) {
-      null
-    }
-
-    eventSink.success(
-      mapOf(
-        "id" to (packageInfo?.packageName ?: packageName),
-        "name" to packageInfo?.let {
-          context.packageManager.getApplicationLabel(
-            it.applicationInfo
-          )
-        },
-        "path" to packageInfo?.applicationInfo?.sourceDir,
-        "icon" to icon
-      )
-    )
-  }
-
 }
 
 private fun bitmapToBytes(bitmap: Bitmap): ByteArray {

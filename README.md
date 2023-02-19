@@ -1,8 +1,8 @@
+> **Warning** this is a WIP.
+
 # Device Packages plugin for Flutter
 
-
 ![Plugin badge version](https://img.shields.io/pub/v/device_packages.svg?style=for-the-badge&color=22272E&showLabel=false&labelColor=15191f&logo=dart&logoColor=blue)
-
 
 A plugin to list installed applications on an Android device (iOS is not supported). You can also listen to app changes (install, uninstall and update).
 

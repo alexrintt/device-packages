@@ -16,10 +16,20 @@ environment:
 
 dependencies:
   # Development dependencies:
+  # device_packages_android:
+  #   path: ../device_packages_android
+  # device_packages_platform_interface:
+  #   path: ../device_packages_platform_interface
+
+  # Prod dependencies, replace with pub namespace when published:
   device_packages_android:
-    path: ../device_packages_android
+    git: 
+      url: https://github.com/alexrintt/device-packages
+      path: device_packages_android
   device_packages_platform_interface:
-    path: ../device_packages_platform_interface
+    git:
+      url: https://github.com/alexrintt/device-packages
+      path: device_packages_platform_interface
 
   flutter:
     sdk: flutter

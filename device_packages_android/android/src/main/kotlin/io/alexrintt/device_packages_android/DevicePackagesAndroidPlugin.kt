@@ -21,6 +21,9 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -114,41 +117,51 @@ class GetInstalledPackagesStreamHandler(private val plugin: DevicePackagesAndroi
 
     val flags: Int = PackageManager.GET_META_DATA
 
-    val packages: List<PackageInfo> =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        plugin.context.packageManager!!.getInstalledPackages(
-          PackageManager.PackageInfoFlags.of(
-            flags.toLong()
+    CoroutineScope(Dispatchers.Default).launch {
+      val packages: List<PackageInfo> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          plugin.context.packageManager!!.getInstalledPackages(
+            PackageManager.PackageInfoFlags.of(
+              flags.toLong()
+            )
           )
-        )
-      } else {
-        @Suppress("DEPRECATION") // we are handling when API >= Build.VERSION_CODES.TIRAMISU.
-        plugin.context.packageManager!!.getInstalledPackages(flags)
-      }
+        } else {
+          @Suppress("DEPRECATION") // we are handling when API >= Build.VERSION_CODES.TIRAMISU.
+          plugin.context.packageManager!!.getInstalledPackages(flags)
+        }
 
-    packages.forEach skip@{
-      val isSystemPackage =
-        (it.applicationInfo?.flags ?: 0) and SYSTEM_APP_FLAG != 0
+      packages.forEach skip@{
+        val isSystemPackage =
+          (it.applicationInfo?.flags ?: 0) and SYSTEM_APP_FLAG != 0
 
-      if (isSystemPackage && !includeSystemPackages) {
-        return@skip
-      }
-
-      if (onlyOpenablePackages) {
-        if (plugin.context.packageManager.getLaunchIntentForPackage(it.packageName) == null) {
+        if (isSystemPackage && !includeSystemPackages) {
           return@skip
+        }
+
+        if (onlyOpenablePackages) {
+          if (plugin.context.packageManager.getLaunchIntentForPackage(it.packageName) == null) {
+            return@skip
+          }
+        }
+
+        if (eventSink == null) {
+          // Listener was canceled during the loop by some other event.
+          launch(Dispatchers.Main) { cancelListener() }
+          return@launch
+        }
+
+        launch(Dispatchers.Main) {
+          eventSink?.success(
+            it.toMap(
+              plugin.context,
+              includeIcon
+            )
+          )
         }
       }
 
-      if (eventSink == null) {
-        // Listener was canceled during the loop by some other event.
-        return cancelListener()
-      }
-
-      eventSink?.success(it.toMap(plugin.context, includeIcon))
+      launch(Dispatchers.Main) { cancelListener() }
     }
-
-    cancelListener()
   }
 
   override fun onCancel(arguments: Any?) = cancelListener()
@@ -377,38 +390,41 @@ class DevicePackagesAndroidPluginMethodCallHandler(private val plugin: DevicePac
       parseArg(call.arguments, "onlyOpenablePackages")
         ?: DEFAULT_ONLY_OPENABLE_PACKAGES
 
-    val packages: List<PackageInfo> =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        plugin.context.packageManager!!.getInstalledPackages(
-          PackageManager.PackageInfoFlags.of(
-            GET_PACKAGE_METADATA_FLAG.toLong()
+
+    CoroutineScope(Dispatchers.Default).launch {
+      val packages: List<PackageInfo> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          plugin.context.packageManager!!.getInstalledPackages(
+            PackageManager.PackageInfoFlags.of(
+              GET_PACKAGE_METADATA_FLAG.toLong()
+            )
           )
-        )
-      } else {
-        @Suppress("DEPRECATION") // we are handling when API >= Build.VERSION_CODES.TIRAMISU.
-        plugin.context.packageManager!!.getInstalledPackages(
-          GET_PACKAGE_METADATA_FLAG
-        )
-      }
+        } else {
+          @Suppress("DEPRECATION") // we are handling when API >= Build.VERSION_CODES.TIRAMISU.
+          plugin.context.packageManager!!.getInstalledPackages(
+            GET_PACKAGE_METADATA_FLAG
+          )
+        }
 
-    val eligiblePackages = packages.filter isEligible@{
-      val isSystemPackage =
-        (it.applicationInfo?.flags ?: 0) and SYSTEM_APP_FLAG != 0
+      val eligiblePackages = packages.filter isEligible@{
+        val isSystemPackage =
+          (it.applicationInfo?.flags ?: 0) and SYSTEM_APP_FLAG != 0
 
-      if (isSystemPackage && !includeSystemPackages) {
-        return@isEligible false
-      }
-
-      if (onlyOpenablePackages) {
-        if (plugin.context.packageManager.getLaunchIntentForPackage(it.packageName) == null) {
+        if (isSystemPackage && !includeSystemPackages) {
           return@isEligible false
         }
-      }
 
-      return@isEligible true
-    }.map { it.toMap(plugin.context, includeIcon) }
+        if (onlyOpenablePackages) {
+          if (plugin.context.packageManager.getLaunchIntentForPackage(it.packageName) == null) {
+            return@isEligible false
+          }
+        }
 
-    result.success(eligiblePackages)
+        return@isEligible true
+      }.map { it.toMap(plugin.context, includeIcon) }
+
+      launch(Dispatchers.Main) { result.success(eligiblePackages) }
+    }
   }
 
   private fun getInstalledPackageCount(call: MethodCall, result: Result) {

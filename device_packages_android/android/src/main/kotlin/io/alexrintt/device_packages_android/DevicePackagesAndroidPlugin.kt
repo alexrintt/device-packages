@@ -251,14 +251,6 @@ class DevicePackagesAndroidPluginMethodCallHandler(private val plugin: DevicePac
   }
 
   private fun installPackage(call: MethodCall, result: Result) {
-    if (!canRequestPackageInstalls()) {
-      return result.error(
-        MISSING_PERMISSION_TO_REQUEST_INSTALL_PACKAGE_ERROR,
-        "Apps targeting API level 26 or newer must hold this permission in order to use Intent.ACTION_INSTALL_PACKAGE or the PackageInstaller API.",
-        call.arguments
-      )
-    }
-
     val installerUri: String? = parseArg<String>(call.arguments, "installerUri")
     val installerPath: String? =
       parseArg<String>(call.arguments, "installerPath")

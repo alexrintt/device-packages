@@ -77,6 +77,7 @@ class PackageInfo {
     this.icon,
     this.installerPath,
     this.isSystemPackage,
+    this.isOpenable,
   });
 
   /// The idenfier of this package within the OS.
@@ -93,6 +94,9 @@ class PackageInfo {
 
   /// Whether or not this package was built onto the system image.
   final bool? isSystemPackage;
+
+  /// Whether or not this package can be opened.
+  final bool? isOpenable;
 }
 
 class PackageEvent {

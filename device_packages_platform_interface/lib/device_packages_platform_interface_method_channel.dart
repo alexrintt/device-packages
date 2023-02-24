@@ -256,6 +256,7 @@ class _RawEventToDevicePackageStreamTransformer
       name: rawPackage['name'] as String?,
       installerPath: rawPackage['installerPath'] as String?,
       isSystemPackage: rawPackage['isSystemPackage'] as bool?,
+      isOpenable: rawPackage['isOpenable'] as bool?,
     );
   }
 }

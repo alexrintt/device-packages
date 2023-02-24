@@ -171,11 +171,17 @@ fun PackageInfo.toMap(
   includeIcon: Boolean = false
 ): Map<String, *> {
   assert(if (includeIcon) context != null else true) { "Context must not be null if [includeIcon] is [true]." }
+
+  val isOpenable: (PackageManager) -> Boolean = { packageManager ->
+    packageManager.getLaunchIntentForPackage(this.packageName) != null
+  }
+
   return mapOf(
     "id" to this.packageName,
     "name" to context?.packageManager?.getApplicationLabel(this.applicationInfo),
     "installerPath" to this.applicationInfo.sourceDir,
     "isSystemPackage" to (this.applicationInfo.flags and SYSTEM_APP_FLAG != 0),
+    "isOpenable" to (context?.packageManager?.let(isOpenable)),
     "icon" to
       if (includeIcon) {
         bitmapToBytes(

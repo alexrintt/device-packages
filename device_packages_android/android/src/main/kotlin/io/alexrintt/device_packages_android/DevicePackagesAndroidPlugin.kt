@@ -61,7 +61,7 @@ class DevicePackagesAndroidPlugin : FlutterPlugin {
 
   lateinit var context: Context
 
-  override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+  override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     context = flutterPluginBinding.applicationContext
 
     channel = MethodChannel(
@@ -193,6 +193,7 @@ fun PackageInfo.toMap(
     "id" to this.packageName,
     "name" to context?.packageManager?.getApplicationLabel(this.applicationInfo),
     "installerPath" to this.applicationInfo.sourceDir,
+    "length" to File(this.applicationInfo.sourceDir).length(),
     "isSystemPackage" to (this.applicationInfo.flags and SYSTEM_APP_FLAG != 0),
     "isOpenable" to (context?.packageManager?.let(isOpenable)),
     "icon" to

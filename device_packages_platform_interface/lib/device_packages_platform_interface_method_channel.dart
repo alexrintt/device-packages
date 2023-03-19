@@ -104,7 +104,7 @@ class DevicePackagesPlatformInterfaceMethodChannel
     Uri? installerUri,
     String? installerPath,
     File? installerFile,
-  }) {
+  }) async {
     assert(
       installerUri != null || installerPath != null || installerFile != null,
       '''You must define at least one installer source, [installerUri], [installerPath] or [installerFile].''',
@@ -117,7 +117,7 @@ class DevicePackagesPlatformInterfaceMethodChannel
     };
 
     try {
-      return methodChannel.invokeMethod<void>('installPackage', args);
+      return await methodChannel.invokeMethod<void>('installPackage', args);
     } on PlatformException catch (e) {
       switch (e.code) {
         case MissingPermissionToRequestInstallPackageError.code:
@@ -199,7 +199,7 @@ class MissingPermissionToRequestInstallPackageError
 
 /// On Android, it is thrown when [getPackage] is called with an [packageId]
 /// that the application has no permission over or the application simply is not installed.
-class PackageNotFoundException extends _DevicePackagesError {
+class PackageNotFoundException extends _DevicePackagesException {
   PackageNotFoundException([super.message]);
 
   static const String code = 'PackageNotFoundException';
@@ -257,6 +257,7 @@ class _RawEventToDevicePackageStreamTransformer
       installerPath: rawPackage['installerPath'] as String?,
       isSystemPackage: rawPackage['isSystemPackage'] as bool?,
       isOpenable: rawPackage['isOpenable'] as bool?,
+      length: rawPackage['length'] as int?,
     );
   }
 }

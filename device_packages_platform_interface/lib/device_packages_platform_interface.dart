@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -70,6 +72,20 @@ abstract class DevicePackagesPlatformInterface extends PlatformInterface {
   });
 }
 
+String getFileSizeString(int bytes, {int decimals = 0}) {
+  const List<String> suffixes = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+
+  if (bytes == 0) return '0${suffixes[0]}';
+
+  final int i = (log(bytes) / log(1024)).floor();
+
+  return ((bytes / pow(1024, i)).toStringAsFixed(decimals)) + suffixes[i];
+}
+
+extension FormattedBytes on num {
+  String formatBytes() => getFileSizeString(this ~/ 1);
+}
+
 class PackageInfo {
   const PackageInfo({
     this.id,
@@ -78,7 +94,14 @@ class PackageInfo {
     this.installerPath,
     this.isSystemPackage,
     this.isOpenable,
+    this.length,
   });
+
+  String get nameWithFormattedSize => '$name $formattedSize';
+
+  String get formattedSize => length != null ? length!.formatBytes() : '';
+
+  final int? length;
 
   /// The idenfier of this package within the OS.
   final String? id;

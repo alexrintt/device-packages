@@ -151,10 +151,21 @@ class DevicePackagesPlatformInterfaceMethodChannel
   }
 
   @override
-  Future<void> openPackage(String packageId) {
+  Future<void> openPackage(String packageId) async {
     final Map<String, dynamic> args = <String, dynamic>{'packageId': packageId};
 
-    return methodChannel.invokeMethod<void>('openPackage', args);
+    try {
+      await methodChannel.invokeMethod<void>('openPackage', args);
+    } on PlatformException catch (e) {
+      switch (e.code) {
+        case PackageIsNotOpenableException.code:
+          throw const PackageIsNotOpenableException(
+            'This is not an openable package, on Android this means this package has no launch intent',
+          );
+        default:
+          rethrow;
+      }
+    }
   }
 
   @override
@@ -178,6 +189,13 @@ class InvalidInstallerException extends _DevicePackagesException {
   const InvalidInstallerException([super.message]);
 
   static const String code = 'InvalidInstallerException';
+}
+
+/// On Android, this exception is thrown when [openPackage] is called on a package that has no launch intent.
+class PackageIsNotOpenableException extends _DevicePackagesException {
+  const PackageIsNotOpenableException([super.message]);
+
+  static const String code = 'PackageIsNotOpenableException';
 }
 
 /// On Android, this exception is thrown when the app has no permission over the
@@ -258,6 +276,7 @@ class _RawEventToDevicePackageStreamTransformer
       isSystemPackage: rawPackage['isSystemPackage'] as bool?,
       isOpenable: rawPackage['isOpenable'] as bool?,
       length: rawPackage['length'] as int?,
+      versionName: rawPackage['versionName'] as String?,
     );
   }
 }

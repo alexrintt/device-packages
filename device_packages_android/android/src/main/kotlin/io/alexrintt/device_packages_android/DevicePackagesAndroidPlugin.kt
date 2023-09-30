@@ -195,6 +195,7 @@ fun PackageInfo.toMap(
     "installerPath" to this.applicationInfo.sourceDir,
     "length" to File(this.applicationInfo.sourceDir).length(),
     "isSystemPackage" to (this.applicationInfo.flags and SYSTEM_APP_FLAG != 0),
+    "versionName" to this.versionName,
     "isOpenable" to (context?.packageManager?.let(isOpenable)),
     "icon" to
       if (includeIcon) {
@@ -390,7 +391,6 @@ class DevicePackagesAndroidPluginMethodCallHandler(private val plugin: DevicePac
     val onlyOpenablePackages: Boolean =
       parseArg(call.arguments, "onlyOpenablePackages")
         ?: DEFAULT_ONLY_OPENABLE_PACKAGES
-
 
     CoroutineScope(Dispatchers.Default).launch {
       val packages: List<PackageInfo> =

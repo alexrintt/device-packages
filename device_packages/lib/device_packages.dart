@@ -11,7 +11,8 @@ export 'package:device_packages_platform_interface/device_packages_platform_inte
         InvalidInstallerException,
         MissingPermissionToRequestInstallPackageError,
         UnsuccessfulPackageInstallRequestException,
-        PackageNotFoundException;
+        PackageNotFoundException,
+        PackageIsNotOpenableException;
 
 class DevicePackages {
   /// Returns all packages from the device, note that this may cause several

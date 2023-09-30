@@ -95,12 +95,19 @@ class PackageInfo {
     this.isSystemPackage,
     this.isOpenable,
     this.length,
+    this.versionName,
   });
 
   String get nameWithFormattedSize => '$name $formattedSize';
 
   String get formattedSize => length != null ? length!.formatBytes() : '';
 
+  /// The human-readable version name of this package.
+  ///
+  /// [PackageInfo.versionName] when the platform is Android.
+  final String? versionName;
+
+  /// Size of this package in bytes.
   final int? length;
 
   /// The idenfier of this package within the OS.

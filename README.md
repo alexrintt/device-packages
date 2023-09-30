@@ -118,9 +118,9 @@ To open package settings:
 DevicePackages.openPackageSettings('io.alexrintt.kanade');
 ```
 
-## Uninstall an package
+## Uninstall package
 
-To open the screen to uninstall an package:
+To open the screen to uninstall a package:
 
 1. Add this permission to the `AndroidManifest.xml` file:
 
@@ -133,6 +133,28 @@ To open the screen to uninstall an package:
 
 ```dart
 DevicePackages.uninstallPackage('io.alexrintt.kanade');
+```
+
+## Install package
+
+To open the screen to install a package:
+
+1. Add this permission to the `AndroidManifest.xml` file:
+
+```xml
+<!-- Remember to add the permission -->
+<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+```
+
+2. Call this method:
+
+```dart
+// Android: If you are working with SAF (or URIs in general).
+DevicePackages.installPackage(installerUri: Uri.parse('...'));
+
+// Android: If you are working with old SDKs or managing your files by MANAGE_EXTERNAL_STORAGE (or File APIs in general).
+DevicePackages.installPackage(installerPath: '/storage/emulated/0/Downloads/app.apk');
+DevicePackages.installPackage(installerFile: File('/storage/emulated/0/Downloads/app.apk'));
 ```
 
 ## Include package icon
@@ -185,7 +207,6 @@ DevicePackages.listenToPackageEvents().liste(
 )
 ```
 
-
 ## Footnotes
 
 This plugin was initially a fork of `device_apps` https://github.com/g123k/flutter_plugin_device_apps, but since the plugin author is no longer maintaining the project (resolving issues or merging pull requests) I did decide to create this plugin, make some improvements and add some features:
@@ -197,4 +218,3 @@ This plugin was initially a fork of `device_apps` https://github.com/g123k/flutt
 - [ ] Support for getting the current Android launcher package https://github.com/g123k/flutter_plugin_device_apps/pull/82.
 - [ ] Getting package info from intaller file/uri, on Android this means generating the `PackageInfo` from an apk file https://github.com/g123k/flutter_plugin_device_apps/pull/92.
 - [ ] Sign-in apk files https://stackoverflow.com/questions/10630796/signing-apk-files-programmatically-in-java.
-
